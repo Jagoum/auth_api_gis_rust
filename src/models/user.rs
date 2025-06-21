@@ -4,7 +4,9 @@ use utoipa::ToSchema;
 #[derive(Debug, Serialize, Deserialize, ToSchema, Clone)]
 pub struct User {
     pub id: i32,
-    pub username: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
     pub password: String, // Hashed in production
     pub role: Role,
 }
@@ -17,11 +19,28 @@ pub enum Role {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct LoginRequest {
-    pub username: String,
+    pub email: String,
     pub password: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RegisterRequest {
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RegisterResponse {
+    pub id: i32,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
     pub token: String,
 }

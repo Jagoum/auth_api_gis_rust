@@ -16,11 +16,13 @@ pub mod utils;
 use crate::{
     middleware::auth::auth_middleware,
     routes::{auth, protected},
+    utils::Config,
 };
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub users: Arc<Mutex<Vec<models::User>>>,
+    pub config: Arc<utils::Config>,
 }
 
 #[tokio::main]
@@ -38,16 +40,23 @@ async fn main() {
     )]
     struct ApiDoc;
 
-    let state = AppState { users: Arc::new(Mutex::new(vec![])) };
+    let state = AppState {
+        users: Arc::new(Mutex::new(vec![])),
+        config: Arc::new(Config::load_env()),
+    };
 
     let app = Router::new()
         .route("/admin", get(protected::admin_route))
-        .layer(axum::middleware::from_fn(auth_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route("/login", post(auth::login))
         .route("/register", post(auth::register))
         .layer(CorsLayer::permissive())
         .with_state(state);
+    println!("Server is serving on http://localhost:3000/swagger-ui");
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();

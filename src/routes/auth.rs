@@ -6,10 +6,11 @@ use serde_json::json;
 use utoipa::OpenApi;
 
 use crate::middleware::auth::Claims;
+use crate::models::user::RegisterRequest;
 use crate::models::{LoginRequest, LoginResponse, Role};
 use crate::AppState;
 
-const JWT_SALT: &[u8; 16] = b"your-salt-valuee"; // Use a secure key in production
+// const JWT_SALT: &[u8; 16] = b"your-salt-valuee"; // Use a secure key in production
 
 #[derive(OpenApi)]
 #[openapi(paths(login), components(schemas(LoginRequest, LoginResponse)))]
@@ -31,7 +32,7 @@ pub async fn login(
     let users = state.users.lock().unwrap();
 
     // Check if the user exists and the password matches
-    let user = users.iter().find(|u| u.username == payload.username);
+    let user = users.iter().find(|u| u.email == payload.email);
     if user.is_none()
         || bcrypt::verify(payload.password.as_bytes(), &user.unwrap().password).ok() != Some(true)
     {
@@ -39,11 +40,11 @@ pub async fn login(
             StatusCode::UNAUTHORIZED,
             Json(json!({"error": "Invalid credentials"})),
         )
-            .into_response()
+            .into_response();
     }
-
+    let config = state.config.clone();
     let claims = Claims {
-        sub: payload.username.clone(),
+        sub: payload.email.clone(),
         role: user.unwrap().role.clone(),
         exp: (chrono::Utc::now() + chrono::Duration::hours(24)).timestamp() as usize,
     };
@@ -51,7 +52,7 @@ pub async fn login(
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret("your-secret-key".as_ref()),
+        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
     )
     .unwrap();
 
@@ -69,10 +70,10 @@ pub async fn login(
 )]
 pub async fn register(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    Json(payload): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     // In production, save to a database
-    if payload.username.is_empty() || payload.password.is_empty() {
+    if payload.email.is_empty() || payload.password.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "Username and password are required"})),
@@ -81,14 +82,22 @@ pub async fn register(
     }
 
     // Here you would typically hash the password and save the user to a database
-    let hashed_password =
-        hash_with_salt(payload.password.as_bytes(), bcrypt::DEFAULT_COST, *JWT_SALT).unwrap();
+    let config = state.config.clone();
+
+    let hashed_password = hash_with_salt(
+        payload.password.as_bytes(),
+        bcrypt::DEFAULT_COST,
+        config.jwt_salt,
+    )
+    .unwrap();
 
     let mut users = state.users.lock().unwrap();
 
     let new_user = crate::models::User {
         id: users.len() as i32 + 1, // Simple ID generation
-        username: payload.username,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        email: payload.email,
         password: hashed_password.to_string(),
         role: Role::User,
     };
